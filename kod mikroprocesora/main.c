@@ -1,12 +1,16 @@
 #include "main.h"
 
-
+static volatile int16_t tim_cnter = 0;
 ISR(TIMER0_COMPA_vect)
 {
-	PORTB ^= (1 << PB6);
+	tim_cnter++;
+	
+	if(tim_cnter > 300)
+	{
+		PORTB ^= (1 << PB6);
+		tim_cnter = 0;
+	}
 }
-
-
 
 USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 	{
@@ -35,6 +39,11 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 	};
 
 static FILE USBSerialStream;
+volatile static bool ConfigSuccess = true;
+static volatile int8_t phoneBuffer[100];
+static volatile int8_t bufferLength = 1;
+static volatile int8_t numbers = 0;
+volatile int16_t iRead = 0;
 
 void USARTWriteChar(unsigned char data)
 {
@@ -55,10 +64,11 @@ unsigned char USARTReadChar( void )
 	return UDR1;
 }
 
-SIGNAL(USART1_RX_vect)
+void openGate()
 {
-	int16_t c = UDR1;
-	fputs(&c, &USBSerialStream);
+	PORTC |= (1 << PC7);
+	_delay_ms(3000);
+	PORTC &= ~(1 << PC7);
 }
 
 void pb_clear()
@@ -74,19 +84,105 @@ void pb_clear()
 	}
 }
 
+SIGNAL(USART1_RX_vect)
+{
+	int8_t c = UDR1;
+	int16_t c2 = c;
+	if(ConfigSuccess)
+		fputs(&c2, &USBSerialStream); // do debugu
+		
+	if(bufferLength == 1 && c != 0x0D || bufferLength > 98)
+		return;
+	
+	phoneBuffer[bufferLength] = c;
+	bufferLength++;		
+}
+
+static volatile int8_t stringBuffer[100];
+static volatile int8_t stringCnter = 0;
+unsigned char stringCheck(char *s)
+{
+	int i = 1;
+	
+	while(*s != phoneBuffer[i])
+	{
+		i++;
+		if(i > bufferLength-1)
+			return 0;
+	}
+	while (*s)
+	{		
+			
+		if(phoneBuffer[i] != *s++)
+			return 0;
+		i++;			
+		
+		if(i > bufferLength-1)
+			return 0;
+	}
+	
+	stringCnter = 0;
+	while(i < bufferLength -1)
+	{
+		stringBuffer[stringCnter] = phoneBuffer[i];
+		stringCnter++;
+		i++;
+	}
+	
+	return 1;
+}
+
+unsigned char findRinBuff()
+{
+
+	if(bufferLength < 2)
+		return 0;
+		
+	for(unsigned char i = 2; i < bufferLength; i++)
+	{
+		if(phoneBuffer[i] == 0x0D)
+			return i;
+	}
+	
+	return 0;
+
+}
+
+void bufferCheck()
+{
+	if(bufferLength < 2)
+		return;
+		
+	if(findRinBuff() > 0)
+	{
+		if(stringCheck("RING") == 1)
+		{
+			uart_puts("ATH\r");
+			_delay_ms(500);
+		}
+		
+		if(stringCheck("+CLCC: 1,1,6,") == 1)
+		{	
+		
+			if(stringBuffer[21] != '"') // jeśli jest wpisany opis
+			{
+				openGate();
+			}
+			
+		}
+		
+		bufferLength = 1;
+	}
+}
+
 int main(void)
 {
 	int16_t b;
 	
-	SetupHardware();
-    
-	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);
-
-	
+	SetupHardware();    
+	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);	
 	GlobalInterruptEnable();
-	b = "GateKeeper init: OK \n\r";
-	fputs(&b, &USBSerialStream);
-	
+
 	_delay_ms(1000);
 	PORTB |= (1 << PB4);
 	_delay_ms(1500);
@@ -98,20 +194,25 @@ int main(void)
 
 	for (;;)
 	{
-		b = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
-		
-		if(b > -1)
+		if(ConfigSuccess)
 		{
-			fputs(&b, &USBSerialStream);
-			USARTWriteChar(b);	
-			if (b == 'c') pb_clear();; 			
+			b = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
+			
+			if(b > -1)
+			{
+			//	fputs(&b, &USBSerialStream);
+
+				USARTWriteChar(b);	
+			}
+			
+			CDC_Device_USBTask(&VirtualSerial_CDC_Interface);
+			USB_USBTask();
 		}
-		
-		CDC_Device_USBTask(&VirtualSerial_CDC_Interface);
-		USB_USBTask();
+		bufferCheck();
 		
 	}
 }
+
 
 void USARTInit(unsigned int ubrr_value)
 {
@@ -128,8 +229,10 @@ void SetupHardware(void)
 	MCUSR &= ~(1 << WDRF);
 	wdt_disable();
 	
-	
 	DDRB = (1 << PB5) | (1 << PB6) | (1 << PB4);	
+	DDRC = (1 << PC7);
+	PORTC |= (1 << PC2);
+	
 	
 	clock_prescale_set(0);
 
@@ -155,8 +258,6 @@ void EVENT_USB_Device_Disconnect(void)
 
 void EVENT_USB_Device_ConfigurationChanged(void)
 {
-	bool ConfigSuccess = true;
-
 	ConfigSuccess &= CDC_Device_ConfigureEndpoints(&VirtualSerial_CDC_Interface);
 }
 
