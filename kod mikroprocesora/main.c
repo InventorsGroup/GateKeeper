@@ -1,17 +1,5 @@
 #include "main.h"
 
-static volatile int16_t tim_cnter = 0;
-ISR(TIMER0_COMPA_vect)
-{
-	tim_cnter++;
-	
-	if(tim_cnter > 300)
-	{
-		PORTB ^= (1 << PB6);
-		tim_cnter = 0;
-	}
-}
-
 USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 	{
 		.Config =
@@ -37,14 +25,30 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 					},
 			},
 	};
-
+	
 static FILE USBSerialStream;
 volatile static bool ConfigSuccess = true;
 static volatile int8_t phoneBuffer[100];
 static volatile int8_t bufferLength = 1;
-static volatile int8_t numbers = 0;
-volatile int16_t iRead = 0;
+static volatile int8_t seed = 'a';
+volatile static bool bDebug = false;
 
+
+static volatile int8_t tim_cnter = 0;
+ISR(TIMER0_COMPA_vect)
+{
+	tim_cnter++;
+	if(tim_cnter > 100)
+	{
+		PORTB ^= (1 << PB6);
+		tim_cnter = 0;
+	}
+}
+
+ISR(INT1_vect)
+{
+	uart_puts("ATI\r");
+}
 void USARTWriteChar(unsigned char data)
 {
    while(!(UCSR1A & (1<<UDRE1)));
@@ -71,25 +75,14 @@ void openGate()
 	PORTC &= ~(1 << PC7);
 }
 
-void pb_clear()
-{
-	char buffer[5];
-	for (int i =1; i < 11; i++)
-	{
-		uart_puts("AT+CPBW=");
-		itoa(i, buffer, 10);
-		uart_puts(buffer);
-		uart_puts("\r");
-		_delay_ms(100);
-	}
-}
 
 SIGNAL(USART1_RX_vect)
 {
 	int8_t c = UDR1;
 	int16_t c2 = c;
-	if(ConfigSuccess)
+	if(ConfigSuccess && bDebug)
 		fputs(&c2, &USBSerialStream); // do debugu
+	
 		
 	if(bufferLength == 1 && c != 0x0D || bufferLength > 98)
 		return;
@@ -150,9 +143,10 @@ unsigned char findRinBuff()
 
 void bufferCheck()
 {
-	if(bufferLength < 2)
-		return;
-		
+
+	if(bufferLength > 1 && phoneBuffer[1] != 0x0D)
+		bufferLength = 1;
+
 	if(findRinBuff() > 0)
 	{
 		if(stringCheck("RING") == 1)
@@ -182,15 +176,10 @@ int main(void)
 	SetupHardware();    
 	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);	
 	GlobalInterruptEnable();
-
-	_delay_ms(1000);
-	PORTB |= (1 << PB4);
-	_delay_ms(1500);
-	PORTB &= ~(1 << PB4);
-	_delay_ms(3000);
 	
-	PORTB |= (1 << PB5);
-	
+	_delay_ms(5000);
+	uart_puts("ATI\r");
+	_delay_ms(500);
 
 	for (;;)
 	{
@@ -201,8 +190,16 @@ int main(void)
 			if(b > -1)
 			{
 			//	fputs(&b, &USBSerialStream);
-
-				USARTWriteChar(b);	
+				if(b == 'd')
+					bDebug = !bDebug;
+				else
+				if(b == 'c')
+				{
+					for(int e = 1; e < bufferLength; e++)
+						fputs(((int16_t)phoneBuffer[e]), &USBSerialStream);
+				}
+				else
+					USARTWriteChar(b);	
 			}
 			
 			CDC_Device_USBTask(&VirtualSerial_CDC_Interface);
@@ -236,14 +233,17 @@ void SetupHardware(void)
 	
 	clock_prescale_set(0);
 
-	USB_Init();
-	
-	USARTInit(51);
+	USB_Init();	
+	USARTInit(25);
 	
 	TCCR0A |= (1 << WGM01);
 	TCCR0B |= (1 << CS00) | (1 << CS02);
 	TIMSK0 |= (1 << OCIE0A);
 	OCR0A = 255;
+	
+	DDRD &= ~(1 << PD1);
+	EICRA |= (1 << ISC11) | (1 << ISC10);
+	EIMSK |= (1 << INT1);
 }
 
 void EVENT_USB_Device_Connect(void)
