@@ -48,7 +48,7 @@ static FILE USBSerialStream;
 volatile static bool ConfigSuccess = true;
 static volatile int8_t phoneBuffer[100];
 static volatile int8_t bufferLength = 1;
-static volatile int8_t seed = 'a';
+static volatile int8_t numbers = 0;
 volatile static bool bDebug = false;
 volatile int16_t iRead = 0;
 
@@ -158,7 +158,7 @@ void bufferCheck()
 		if(stringCheck("+CLCC: 1,1,6,") == 1)
 		{	
 		
-			if(stringBuffer[21] == seed) // jeśli jest wpisany opis
+			if(stringBuffer[21] != '"') // jeśli jest wpisany opis
 			{
 				openGate();
 			}
@@ -168,6 +168,20 @@ void bufferCheck()
 		bufferLength = 1;
 	}
 }
+
+void pb_clear(int from, int to)
+{
+	char buffer[5];
+	for (int i = from; i < to+1; i++)
+	{
+		uart_puts("AT+CPBW=");
+		itoa(i, buffer, 10);
+		uart_puts(buffer);
+		uart_puts("\r");
+		_delay_ms(300);
+	}
+}
+
 
 int main(void)
 {	
@@ -179,10 +193,7 @@ int main(void)
 	uart_puts("ATI\r");
 	_delay_ms(500);
 
-	seed = eeprom_read_word(( uint16_t *)1);
-	
-	if(seed < 'a' || seed > 'g')
-		seed = 'a';
+	numbers = eeprom_read_word(( uint16_t *)1);
 	
 	for (;;)
 	{
@@ -196,24 +207,26 @@ int main(void)
 				if(b == '*')
 				{
 					iRead = 0;					
-					if(seed == 'g')
-						seed = 'a';
-					else 
-						seed++;
-						
-					eeprom_write_word((uint16_t*)1, (uint16_t)seed);
 				}	
+				
 				if(b == '\r' || b == 0x1A)
 				{
-					uart_puts("\",129,\"");
-					uart_put(seed);
-					uart_puts("\"\r");
+					uart_puts("\",129,\"aa\"\r");
 					_delay_ms(300);
 					bufferLength = 1;
 					
 					fputs("ok\r\n", &USBSerialStream);
 				}
 				
+				if(b == 0x1A)
+				{
+					if(numbers > iRead)
+						pb_clear(iRead +1, numbers);
+					
+					numbers = iRead;
+					eeprom_write_word((uint16_t*)1, (uint16_t)numbers);
+				}		
+								
 				if(b == '*' || b == '\r')
 				{
 					iRead++;
