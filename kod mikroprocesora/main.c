@@ -158,7 +158,7 @@ void bufferCheck()
 		if(stringCheck("+CLCC: 1,1,6,") == 1)
 		{	
 		
-			if(stringBuffer[21] != '"') // jeśli jest wpisany opis
+			if(!(PINC && (1 << PC2)) || stringBuffer[21] != '"') // jeśli jest wpisany opis albo tryb wpuszczaj wszystkich
 			{
 				openGate();
 			}
@@ -269,6 +269,10 @@ int main(void)
 		}
 		bufferCheck();
 		
+		if(!(PINC && (1 << PC2)))
+			PORTB |= (1 << PB5);
+		else
+			PORTB &= ~(1 << PB5);
 	}
 }
 
@@ -306,6 +310,9 @@ void SetupHardware(void)
 	DDRD &= ~(1 << PD1);
 	EICRA |= (1 << ISC11) | (1 << ISC10);
 	EIMSK |= (1 << INT1);
+	
+	DDRC &= ~(1 << PC2);
+	PORTC |= (1 << PC2);
 }
 
 void EVENT_USB_Device_Connect(void)
