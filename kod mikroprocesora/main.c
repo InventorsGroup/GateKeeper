@@ -171,9 +171,9 @@ void bufferCheck()
 
 void pb_clear(int from, int to)
 {
-	char buffer[5];
 	for (int i = from; i < to+1; i++)
 	{
+		char buffer[5];
 		uart_puts("AT+CPBW=");
 		itoa(i, buffer, 10);
 		uart_puts(buffer);
@@ -203,7 +203,6 @@ int main(void)
 			
 			if(b > -1)
 			{
-					
 				if(b == '*')
 				{
 					iRead = 0;					
@@ -233,21 +232,8 @@ int main(void)
 					uart_puts("AT+CPBW=");
 					
 					char buff[5];
-					itoa(iRead, buff, 10);
-					
-					int korekcja = 0;				
-					if(iRead > 99)
-					{
-						korekcja = 2;
-					}
-					else if(iRead > 9)
-					{
-						korekcja = 1;
-					}
-					
-					for(int i = 0; i < korekcja+1; i++)
-						uart_put(buff[i]);
-						
+					itoa(iRead, buff, 10);					
+					uart_puts(buff);						
 					uart_puts(",\"");
 				}
 
@@ -279,7 +265,6 @@ int main(void)
 
 void USARTInit(unsigned int ubrr_value)
 {
-   
    UCSR1A |= (1 << U2X1);
    UCSR1B |= (1 << RXEN1) | (1 << TXEN1) | (1 << RXCIE1);
    UCSR1C |= (1 << UCSZ11) | (1 << UCSZ10);
