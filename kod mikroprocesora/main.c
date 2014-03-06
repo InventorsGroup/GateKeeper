@@ -81,11 +81,7 @@ SIGNAL(USART1_RX_vect)
 	int8_t c = UDR1;
 	int16_t c2 = c;
 	if(ConfigSuccess && bDebug)
-		fputs(&c2, &USBSerialStream); // do debugu
-	
-		
-	if((bufferLength == 1 && c != 0x0D) || bufferLength > 98)
-		return;
+		fputs(&c2, &USBSerialStream); // do debugu	
 	
 	phoneBuffer[bufferLength] = c;
 	bufferLength++;		
@@ -126,12 +122,8 @@ unsigned char stringCheck(char *s)
 }
 
 unsigned char findRinBuff()
-{
-
-	if(bufferLength < 2)
-		return 0;
-		
-	for(unsigned char i = 2; i < bufferLength; i++)
+{		
+	for(unsigned char i = 1; i < bufferLength; i++)
 	{
 		if(phoneBuffer[i] == 0x0D)
 			return i;
@@ -143,22 +135,17 @@ unsigned char findRinBuff()
 
 void bufferCheck()
 {
-
-	if(bufferLength > 1 && phoneBuffer[1] != 0x0D)
-		bufferLength = 1;
-
 	if(findRinBuff() > 0)
 	{
 		if(stringCheck("RING") == 1)
 		{
 			uart_puts("ATH\r");
-			_delay_ms(500);
 		}
 		
 		if(stringCheck("+CLCC: 1,1,6,") == 1)
 		{	
 		
-			if(!(PINC && (1 << PC2)) || stringBuffer[21] != '"') // jeśli jest wpisany opis albo tryb wpuszczaj wszystkich
+			if(!(PINC && (1 << PC2)) || stringBuffer[24] != '"') // jeśli jest wpisany opis albo tryb wpuszczaj wszystkich
 			{
 				openGate();
 			}
@@ -234,7 +221,7 @@ int main(void)
 					char buff[5];
 					itoa(iRead, buff, 10);					
 					uart_puts(buff);						
-					uart_puts(",\"");
+					uart_puts(",\"+48");
 				}
 
 				if(b > 47 && b < 58)
