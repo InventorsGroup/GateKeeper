@@ -25,11 +25,11 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 					},
 			},
 	};
-	
+
 void uart_put( unsigned char data )
 {
 	 while(!(UCSR1A & (1<<UDRE1)));
-		UDR1=data;		        
+		UDR1=data;
 }
 
 void uart_puts(const char *s )
@@ -38,12 +38,12 @@ void uart_puts(const char *s )
       uart_put(*s++);
 }
 
-unsigned char uart_get( void ) 
+unsigned char uart_get( void )
 {
 	while ( !(UCSR1A & (1<<RXC1)) );
 	return UDR1;
 }
-	
+
 static FILE USBSerialStream;
 volatile static bool ConfigSuccess = true;
 static volatile int8_t phoneBuffer[100];
@@ -71,7 +71,11 @@ ISR(INT1_vect)
 void openGate()
 {
 	PORTC |= (1 << PC7);
-	_delay_ms(3000);
+	_delay_ms(1000);
+	PORTC &= ~(1 << PC7);
+	_delay_ms(500);
+	PORTC |= (1 << PC7);
+	_delay_ms(1000);
 	PORTC &= ~(1 << PC7);
 }
 
@@ -81,10 +85,10 @@ SIGNAL(USART1_RX_vect)
 	int8_t c = UDR1;
 	int16_t c2 = c;
 	if(ConfigSuccess && bDebug)
-		fputs(&c2, &USBSerialStream); // do debugu	
-	
+		fputs(&c2, &USBSerialStream); // do debugu
+
 	phoneBuffer[bufferLength] = c;
-	bufferLength++;		
+	bufferLength++;
 }
 
 static volatile int8_t stringBuffer[100];
@@ -92,7 +96,7 @@ static volatile int8_t stringCnter = 0;
 unsigned char stringCheck(char *s)
 {
 	int i = 1;
-	
+
 	while(*s != phoneBuffer[i])
 	{
 		i++;
@@ -100,16 +104,16 @@ unsigned char stringCheck(char *s)
 			return 0;
 	}
 	while (*s)
-	{		
-			
+	{
+
 		if(phoneBuffer[i] != *s++)
 			return 0;
-		i++;			
-		
+		i++;
+
 		if(i > bufferLength-1)
 			return 0;
 	}
-	
+
 	stringCnter = 0;
 	while(i < bufferLength -1)
 	{
@@ -117,18 +121,18 @@ unsigned char stringCheck(char *s)
 		stringCnter++;
 		i++;
 	}
-	
+
 	return 1;
 }
 
 unsigned char findRinBuff()
-{		
+{
 	for(unsigned char i = 1; i < bufferLength; i++)
 	{
 		if(phoneBuffer[i] == 0x0D)
 			return i;
 	}
-	
+
 	return 0;
 
 }
@@ -141,17 +145,17 @@ void bufferCheck()
 		{
 			uart_puts("ATH\r");
 		}
-		
+
 		if(stringCheck("+CLCC: 1,1,6,") == 1)
-		{	
-		
+		{
+
 			if(!(PINC && (1 << PC2)) || stringBuffer[24] != '"') // jeśli jest wpisany opis albo tryb wpuszczaj wszystkich
 			{
 				openGate();
 			}
-			
+
 		}
-		
+
 		bufferLength = 1;
 	}
 }
@@ -171,77 +175,77 @@ void pb_clear(int from, int to)
 
 
 int main(void)
-{	
-	SetupHardware();    
-	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);	
+{
+	SetupHardware();
+	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);
 	GlobalInterruptEnable();
-	
+
 	_delay_ms(5000);
 	uart_puts("ATI\r");
 	_delay_ms(500);
 
 	numbers = eeprom_read_word(( uint16_t *)1);
-	
+
 	for (;;)
 	{
 		if(ConfigSuccess)
 		{
 			int16_t b = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
-			
+
 			if(b > -1)
 			{
 				if(b == '*')
 				{
-					iRead = 0;					
-				}	
-				
+					iRead = 0;
+				}
+
 				if(b == '\r' || b == 0x1A)
 				{
 					uart_puts("\",129,\"aa\"\r");
 					_delay_ms(300);
 					bufferLength = 1;
-					
+
 					fputs("ok\r\n", &USBSerialStream);
 				}
-				
+
 				if(b == 0x1A)
 				{
 					if(numbers > iRead)
 						pb_clear(iRead +1, numbers);
-					
+
 					numbers = iRead;
 					eeprom_write_word((uint16_t*)1, (uint16_t)numbers);
-				}		
-								
+				}
+
 				if(b == '*' || b == '\r')
 				{
 					iRead++;
 					uart_puts("AT+CPBW=");
-					
+
 					char buff[5];
-					itoa(iRead, buff, 10);					
-					uart_puts(buff);						
+					itoa(iRead, buff, 10);
+					uart_puts(buff);
 					uart_puts(",\"+48");
 				}
 
 				if(b > 47 && b < 58)
 				{
-					uart_put(b);			
+					uart_put(b);
 				}
-				
+
 				if(b == 0x1B)
 					openGate();
-					
+
 				if(b == 'd')
 					bDebug = !bDebug;
-									
+
 			}
-			
+
 			CDC_Device_USBTask(&VirtualSerial_CDC_Interface);
 			USB_USBTask();
 		}
 		bufferCheck();
-		
+
 		if(!(PINC && (1 << PC2)))
 			PORTB |= (1 << PB5);
 		else
@@ -263,26 +267,26 @@ void SetupHardware(void)
 {
 	MCUSR &= ~(1 << WDRF);
 	wdt_disable();
-	
-	DDRB = (1 << PB5) | (1 << PB6) | (1 << PB4);	
+
+	DDRB = (1 << PB5) | (1 << PB6) | (1 << PB4);
 	DDRC = (1 << PC7);
 	PORTC |= (1 << PC2);
-	
-	
+
+
 	clock_prescale_set(0);
 
-	USB_Init();	
+	USB_Init();
 	USARTInit(25);
-	
+
 	TCCR0A |= (1 << WGM01);
 	TCCR0B |= (1 << CS00) | (1 << CS02);
 	TIMSK0 |= (1 << OCIE0A);
 	OCR0A = 255;
-	
+
 	DDRD &= ~(1 << PD1);
 	EICRA |= (1 << ISC11) | (1 << ISC10);
 	EIMSK |= (1 << INT1);
-	
+
 	DDRC &= ~(1 << PC2);
 	PORTC |= (1 << PC2);
 }
